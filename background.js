@@ -61,19 +61,13 @@ function isTimeInAnyRange(schedules) {
   }
 }
 
-// Global sets to store active domains for quick lookup
-let activeBlockDomains = new Set();
-let activeExceptionDomains = new Set();
-let isExceptionModeActive = false;
-
-// Function to update the blocking rules (declarativeNetRequest for block rules)
-async function updateBlockingRules() {
+// Function to check and redirect tabs based on current mode
+async function checkAndRedirectBlockedTabs() {
   try {
     const { rules = [] } = await chrome.storage.sync.get('rules');
-    
-    activeBlockDomains.clear();
-    activeExceptionDomains.clear();
-    isExceptionModeActive = false;
+    let activeBlockDomains = new Set();
+    let activeExceptionDomains = new Set();
+    let isExceptionModeActive = false;
 
     rules.forEach(rule => {
       if (rule && rule.websites && rule.type && rule.schedules) {
@@ -81,64 +75,13 @@ async function updateBlockingRules() {
           if (rule.type === 'block') {
             rule.websites.forEach(website => activeBlockDomains.add(website));
           } else if (rule.type === 'exception') {
-            isExceptionModeActive = true; // Activate exception mode if any exception rule is active
+            isExceptionModeActive = true;
             rule.websites.forEach(website => activeExceptionDomains.add(website));
           }
         }
       }
     });
 
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    const existingRuleIds = existingRules.map(rule => rule.id);
-    
-    const rulesToAdd = [];
-
-    if (!isExceptionModeActive) {
-      // If not in exception mode, apply block rules using declarativeNetRequest
-      [...activeBlockDomains].forEach((domain, index) => {
-        const declarativeRuleId = 10000 + index; 
-        rulesToAdd.push({
-          id: declarativeRuleId,
-          priority: 1,
-          action: {
-            type: 'redirect',
-            redirect: {
-              extensionPath: `/blocked.html?url=${encodeURIComponent(domain)}`
-            }
-          },
-          condition: {
-            requestDomains: [domain],
-            resourceTypes: ['main_frame']
-          }
-        });
-      });
-    } else {
-      // If in exception mode, clear all declarative rules.
-      // Programmatic blocking will handle the "block all except" logic.
-    }
-    
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: existingRuleIds,
-      addRules: rulesToAdd
-    });
-    
-    console.log(`Blocking rules updated at: ${new Date().toLocaleTimeString()}`);
-    console.log(`Active declarative rules: ${rulesToAdd.length}`);
-    console.log(`Is Exception Mode Active: ${isExceptionModeActive}`);
-    console.log(`Active Block Domains: [${[...activeBlockDomains].join(', ')}]`);
-    console.log(`Active Exception Domains: [${[...activeExceptionDomains].join(', ')}]`);
-
-    // Always check and redirect tabs for currently active blocking rules
-    await checkAndRedirectBlockedTabs();
-    
-  } catch (error) {
-    console.error('Error updating blocking rules:', error);
-  }
-}
-
-// Function to check and redirect tabs based on current mode
-async function checkAndRedirectBlockedTabs() {
-  try {
     const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
     console.log(`Checking ${tabs.length} tabs for blocking/exception rules`);
 
@@ -150,8 +93,10 @@ async function checkAndRedirectBlockedTabs() {
         let shouldBlock = false;
 
         if (isExceptionModeActive) {
-          // In exception mode, block all domains NOT in activeExceptionDomains (exact match)
-          shouldBlock = !activeExceptionDomains.has(tabDomain);
+          // In exception mode, block all domains NOT in activeExceptionDomains (broad match for exceptions)
+          shouldBlock = ![...activeExceptionDomains].some(exceptionDomain =>
+            tabDomain === exceptionDomain || tabDomain.endsWith('.' + exceptionDomain)
+          );
         } else {
           // In normal block mode, block domains in activeBlockDomains (broad match)
           shouldBlock = [...activeBlockDomains].some(blockedDomain =>
@@ -185,6 +130,120 @@ async function checkAndRedirectBlockedTabs() {
   }
 }
 
+// Function to update the blocking rules using declarativeNetRequest
+async function updateBlockingRules() {
+  try {
+    const { rules = [] } = await chrome.storage.sync.get('rules');
+    
+    let activeBlockDomains = new Set();
+    let activeExceptionDomains = new Set();
+    let isExceptionModeActive = false;
+
+    rules.forEach(rule => {
+      if (rule && rule.websites && rule.type && rule.schedules) {
+        if (isTimeInAnyRange(rule.schedules)) {
+          if (rule.type === 'block') {
+            rule.websites.forEach(website => activeBlockDomains.add(website));
+          } else if (rule.type === 'exception') {
+            isExceptionModeActive = true;
+            rule.websites.forEach(website => activeExceptionDomains.add(website));
+          }
+        }
+      }
+    });
+
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const existingRuleIds = existingRules.map(rule => rule.id);
+    
+    const rulesToAdd = [];
+    const blockedPagePath = "/blocked.html"; // Use relative path
+
+    if (isExceptionModeActive) {
+      // In exception mode, block all requests except those matching the exception domains.
+      // Rule ID 1 is for the general block rule.
+      rulesToAdd.push({
+        id: 1,
+        priority: 1,
+        action: {
+          type: 'redirect',
+          redirect: { extensionPath: blockedPagePath }
+        },
+        condition: {
+          urlFilter: "*", // Block all URLs by default
+          resourceTypes: ['main_frame']
+        }
+      });
+
+      // Add exception rules (allow list)
+      [...activeExceptionDomains].forEach((domain, index) => {
+        // Rule IDs for exceptions start from 2
+        const exceptionRuleId = 2 + index; 
+        rulesToAdd.push({
+          id: exceptionRuleId,
+          priority: 2, // Higher priority to override the general block rule
+          action: { type: 'allow' },
+          condition: {
+            urlFilter: `*://*.${domain}/*`, // Allow domain and all subdomains
+            resourceTypes: ['main_frame']
+          }
+        });
+        rulesToAdd.push({
+          id: exceptionRuleId + 1000, // Add another rule for the exact domain without subdomain
+          priority: 2,
+          action: { type: 'allow' },
+          condition: {
+            urlFilter: `*://${domain}/*`,
+            resourceTypes: ['main_frame']
+          }
+        });
+      });
+    } else {
+      // In normal block mode, block specific domains.
+      [...activeBlockDomains].forEach((domain, index) => {
+        const declarativeRuleId = 10000 + index; 
+        rulesToAdd.push({
+          id: declarativeRuleId,
+          priority: 1,
+          action: {
+            type: 'redirect',
+            redirect: { extensionPath: blockedPagePath }
+          },
+          condition: {
+            urlFilter: `*://*.${domain}/*`, // Block domain and all subdomains
+            resourceTypes: ['main_frame']
+          }
+        });
+        rulesToAdd.push({
+          id: declarativeRuleId + 1000, // Add another rule for the exact domain without subdomain
+          priority: 1,
+          action: {
+            type: 'redirect',
+            redirect: { extensionPath: blockedPagePath }
+          },
+          condition: {
+            urlFilter: `*://${domain}/*`,
+            resourceTypes: ['main_frame']
+          }
+        });
+      });
+    }
+    
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: existingRuleIds,
+      addRules: rulesToAdd
+    });
+    
+    console.log(`Blocking rules updated at: ${new Date().toLocaleTimeString()}`);
+    console.log(`Active declarative rules: ${rulesToAdd.length}`);
+    console.log(`Is Exception Mode Active: ${isExceptionModeActive}`);
+    console.log(`Active Block Domains: [${[...activeBlockDomains].join(', ')}]`);
+    console.log(`Active Exception Domains: [${[...activeExceptionDomains].join(', ')}]`);
+    
+  } catch (error) {
+    console.error('Error updating blocking rules:', error);
+  }
+}
+
 // Run on startup
 chrome.runtime.onStartup.addListener(async () => {
   console.log('Extension startup - updating rules');
@@ -195,8 +254,8 @@ chrome.runtime.onStartup.addListener(async () => {
       periodInMinutes: 0.0167 // Every 1 second for immediate blocking
     });
 
-    updateBlockingRules();
-    setTimeout(() => checkAndRedirectBlockedTabs(), 1000);
+    await updateBlockingRules();
+    await checkAndRedirectBlockedTabs(); // Check and redirect existing tabs on startup
   } catch (error) {
     console.error('Error during startup setup:', error);
   }
@@ -212,9 +271,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       periodInMinutes: 0.0167 // Every 1 second for immediate blocking
     });
 
-    updateBlockingRules();
-    setTimeout(() => checkAndRedirectBlockedTabs(), 1000);
-
+    await updateBlockingRules();
+    await checkAndRedirectBlockedTabs(); // Check and redirect existing tabs on install/update
   } catch (error) {
     console.error('Error during installation setup:', error);
   }
@@ -225,86 +283,29 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'ruleChecker') {
     console.log(`🔔 Alarm triggered at ${new Date().toLocaleTimeString()} - checking rules`);
     await updateBlockingRules();
-    console.log('🔍 Force checking all tabs for immediate blocking...');
-    await checkAndRedirectBlockedTabs();
+    await checkAndRedirectBlockedTabs(); // Check and redirect existing tabs when alarm fires
   }
 });
 
 // Listen for tab updates (navigation, refresh, etc.)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Only process when the tab is loading or has completed loading and is a valid URL
-  if (changeInfo.status === 'loading' && tab.url && !tab.url.includes('blocked.html')) {
-    try {
-      const tabUrl = new URL(tab.url);
-      const tabDomain = tabUrl.hostname;
-
-      let shouldBlock = false;
-
-      if (isExceptionModeActive) {
-        // In exception mode, block all domains NOT in activeExceptionDomains (exact match)
-        shouldBlock = !activeExceptionDomains.has(tabDomain);
-      } else {
-        // In normal block mode, block domains in activeBlockDomains (broad match)
-        shouldBlock = [...activeBlockDomains].some(blockedDomain =>
-          tabDomain === blockedDomain || tabDomain.endsWith('.' + blockedDomain)
-        );
-      }
-
-      if (shouldBlock) {
-        console.log(`Blocking navigation to: ${tab.url}`);
-        const blockedPageUrl = chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(tabDomain)}`);
-        await chrome.tabs.update(tabId, { url: blockedPageUrl });
-      }
-    } catch (e) {
-      // Ignore errors for non-http URLs or malformed URLs
-    }
-  }
+  // No direct blocking logic here, declarativeNetRequest handles it.
+  // This listener remains for potential future needs or specific edge cases not covered by declarativeNetRequest.
 });
 
 // Listen for tab activation (switching between tabs)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  try {
-    const tab = await chrome.tabs.get(activeInfo.tabId);
-    if (tab.url && !tab.url.includes('blocked.html')) {
-      const tabUrl = new URL(tab.url);
-      const tabDomain = tabUrl.hostname;
-
-      let shouldBlock = false;
-
-      if (isExceptionModeActive) {
-        // In exception mode, block all domains NOT in activeExceptionDomains (exact match)
-        shouldBlock = !activeExceptionDomains.has(tabDomain);
-      } else {
-        // In normal block mode, block domains in activeBlockDomains (broad match)
-        shouldBlock = [...activeBlockDomains].some(blockedDomain =>
-          tabDomain === blockedDomain || tabDomain.endsWith('.' + blockedDomain)
-        );
-      }
-
-      if (shouldBlock) {
-        console.log(`Blocking activated tab: ${tab.url}`);
-        const blockedPageUrl = chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(tabDomain)}`);
-        await chrome.tabs.update(activeInfo.tabId, { url: blockedPageUrl });
-      }
-    }
-  } catch (e) {
-    // Ignore errors for non-http URLs or when tab doesn't exist
-  }
+  // No direct blocking logic here, declarativeNetRequest handles it.
 });
 
 // Listen for messages from the popup (when rules are changed)
-console.log('Background script loaded - checking for blocked tabs immediately');
-setTimeout(() => {
-  checkAndRedirectBlockedTabs();
-}, 500);
+console.log('Background script loaded');
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "updateRules") {
     console.log('Received updateRules message from popup');
     updateBlockingRules()
-      .then(() => {
-        return checkAndRedirectBlockedTabs();
-      })
+      .then(() => checkAndRedirectBlockedTabs()) // Check and redirect after rules are updated
       .then(() => {
         sendResponse({ success: true });
       })
@@ -318,7 +319,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(rules => {
         sendResponse({
           activeRules: rules.length,
-          rules: rules.map(r => ({ id: r.id, domain: r.condition.requestDomains[0] }))
+          rules: rules.map(r => ({ id: r.id, domain: r.condition.requestDomains ? r.condition.requestDomains[0] : r.condition.urlFilter }))
         });
       })
       .catch(error => {
@@ -326,12 +327,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   } else if (message.action === "forceCheck") {
-    console.log('Force checking blocked tabs from popup request');
-    checkAndRedirectBlockedTabs()
+    console.log('Force checking rules from popup request');
+    updateBlockingRules()
+      .then(() => checkAndRedirectBlockedTabs()) // Force check and redirect
       .then(() => {
         sendResponse({ success: true });
       })
       .catch(error => {
+        console.error('Error force checking rules from message:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true;

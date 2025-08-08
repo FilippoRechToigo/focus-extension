@@ -1,10 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Inter', sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background-color: #f0f2f5;
+    background: linear-gradient(135deg, #f0f2f5 0%, #e0e5ec 100%);
     margin: 0;
     color: #333;
 }
@@ -12,8 +14,8 @@ body {
 .container {
     background-color: #fff;
     padding: 40px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     text-align: center;
     max-width: 500px;
     width: 90%;
@@ -26,9 +28,9 @@ body {
 }
 
 h1 {
-    color: #e74c3c;
+    color: #2c3e50;
     margin-bottom: 15px;
-    font-size: 2em;
+    font-size: 2.2em;
 }
 
 p {
@@ -38,7 +40,7 @@ p {
 }
 
 #blockedUrl {
-    font-weight: bold;
-    color: #555;
+    font-weight: 600;
+    color: #3498db;
     word-break: break-all;
 }

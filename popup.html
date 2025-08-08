@@ -7,21 +7,46 @@
 <body>
   <h1>Scheduled Site Blocker</h1>
   
-  <form id="add-rule-form">
-    <h2>Add New Rule</h2>
-    <input type="text" id="domain" placeholder="e.g., youtube.com" required>
-    <div class="time-inputs">
-      <label>From <input type="time" id="start-time" required></label>
-      <label>To <input type="time" id="end-time" required></label>
-    </div>
-    <button type="submit">Add Rule</button>
-  </form>
-  
-  <hr>
-  
-  <h2>Active Rules</h2>
-  <ul id="rules-list">
-    </ul>
+  <div id="rule-list-view">
+    <button id="add-new-rule-btn">Add New Rule</button>
+    <h2>Your Rules</h2>
+    <ul id="rules-list">
+      </ul>
+  </div>
+
+  <div id="rule-editor-view" style="display: none;">
+    <h2><span id="editor-title">Add New Rule</span></h2>
+    <form id="rule-form">
+      <label for="rule-name">Rule Name:</label>
+      <input type="text" id="rule-name" placeholder="e.g., Work Focus" required>
+
+      <label for="websites">Websites (one per line):</label>
+      <textarea id="websites" rows="5" placeholder="e.g., youtube.com&#10;facebook.com"></textarea>
+
+      <label>Rule Type:</label>
+      <div>
+        <input type="radio" id="type-block" name="rule-type" value="block" checked>
+        <label for="type-block">Block</label>
+        <input type="radio" id="type-exception" name="rule-type" value="exception">
+        <label for="type-exception">Exception</label>
+      </div>
+
+      <h3>Schedules</h3>
+      <div id="schedules-container">
+        <div class="schedule-item">
+          <label>From <input type="time" class="start-time" required></label>
+          <label>To <input type="time" class="end-time" required></label>
+          <button type="button" class="remove-schedule-btn">Remove</button>
+        </div>
+      </div>
+      <button type="button" id="add-schedule-btn">Add Schedule</button>
+
+      <div class="form-actions">
+        <button type="submit" id="save-rule-btn">Save Rule</button>
+        <button type="button" id="cancel-edit-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
 
   <hr>
 

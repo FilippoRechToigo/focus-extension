@@ -1,63 +1,185 @@
 body {
-  font-family: sans-serif;
-  width: 300px;
-  padding: 10px;
+  font-family: Arial, sans-serif;
+  width: 400px;
+  padding: 20px;
+  background-color: #f4f4f4;
+  color: #333;
 }
 
-h1, h2 {
+h1, h2, h3 {
+  color: #0056b3;
   text-align: center;
-  margin: 5px 0;
-}
-
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-input[type="text"], input[type="time"] {
-  width: 95%;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-
-.time-inputs {
-  display: flex;
-  justify-content: space-between;
+  margin-bottom: 15px;
 }
 
 button {
-  padding: 10px;
   background-color: #007bff;
   color: white;
+  padding: 10px 15px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 16px;
+  margin-top: 10px;
 }
 
 button:hover {
   background-color: #0056b3;
 }
 
-ul {
+#add-new-rule-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+#rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+#rule-form label {
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: block;
+}
+
+#rule-form input[type="text"],
+#rule-form textarea {
+  width: calc(100% - 20px);
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+#rule-form textarea {
+  resize: vertical;
+}
+
+#rule-form input[type="radio"] {
+  margin-right: 5px;
+}
+
+.schedule-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.schedule-item label {
+  margin-bottom: 0;
+  font-weight: normal;
+}
+
+.schedule-item input[type="time"] {
+  width: 100px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.remove-schedule-btn {
+  background-color: #dc3545;
+  padding: 8px 12px;
+  font-size: 14px;
+  margin-top: 0;
+}
+
+.remove-schedule-btn:hover {
+  background-color: #c82333;
+}
+
+#add-schedule-btn {
+  background-color: #28a745;
+}
+
+#add-schedule-btn:hover {
+  background-color: #218838;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.form-actions button {
+  width: auto;
+}
+
+#cancel-edit-btn {
+  background-color: #6c757d;
+}
+
+#cancel-edit-btn:hover {
+  background-color: #5a6268;
+}
+
+#rules-list {
   list-style: none;
   padding: 0;
 }
 
-li {
+#rules-list li {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px 15px;
+  margin-bottom: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px;
-  border-bottom: 1px solid #eee;
+}
+
+#rules-list li .rule-info {
+  flex-grow: 1;
+}
+
+#rules-list li .rule-actions {
+  display: flex;
+  gap: 5px;
+}
+
+#rules-list li .rule-actions button {
+  padding: 5px 10px;
+  font-size: 12px;
+  margin-top: 0;
+}
+
+.edit-btn {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.edit-btn:hover {
+  background-color: #e0a800;
 }
 
 .delete-btn {
   background-color: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+hr {
+  border: 0;
+  height: 1px;
+  background: #ccc;
+  margin: 20px 0;
+}
+
+#status-message {
+  margin-top: 10px;
+  text-align: center;
+  font-weight: bold;
 }

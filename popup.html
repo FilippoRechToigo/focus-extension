@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Site Blocker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Scheduled Site Blocker</h1>
+  
+  <form id="add-rule-form">
+    <h2>Add New Rule</h2>
+    <input type="text" id="domain" placeholder="e.g., youtube.com" required>
+    <div class="time-inputs">
+      <label>From <input type="time" id="start-time" required></label>
+      <label>To <input type="time" id="end-time" required></label>
+    </div>
+    <button type="submit">Add Rule</button>
+  </form>
+  
+  <hr>
+  
+  <h2>Active Rules</h2>
+  <ul id="rules-list">
+    </ul>
+
+  <hr>
+
+  <h2>Test Controls</h2>
+  <button id="force-check-btn">Force Check Blocked Tabs</button>
+  <div id="status-message"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

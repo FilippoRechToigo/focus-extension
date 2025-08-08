@@ -1,8 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const ruleListView = document.getElementById('rule-list-view');
+  const mainView = document.getElementById('main-view');
+  const ruleListView = document.getElementById('rule-list-view'); // This is now part of main-view
   const ruleEditorView = document.getElementById('rule-editor-view');
+  const strictModeView = document.getElementById('strict-mode-view');
+
   const addNewRuleBtn = document.getElementById('add-new-rule-btn');
+  const configureStrictModeBtn = document.getElementById('configure-strict-mode-btn');
   const rulesList = document.getElementById('rules-list');
+  const strictModeMessageMain = document.getElementById('strict-mode-message-main');
+
   const ruleForm = document.getElementById('rule-form');
   const editorTitle = document.getElementById('editor-title');
   const ruleNameInput = document.getElementById('rule-name');
@@ -13,21 +19,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const addScheduleBtn = document.getElementById('add-schedule-btn');
   const saveRuleBtn = document.getElementById('save-rule-btn');
   const cancelEditBtn = document.getElementById('cancel-edit-btn');
-  const forceCheckBtn = document.getElementById('force-check-btn');
-  const statusMessage = document.getElementById('status-message');
+
+  const strictModeToggle = document.getElementById('strict-mode-toggle');
+  const strictModeSchedulesContainer = document.getElementById('strict-mode-schedules-container');
+  const addStrictModeScheduleBtn = document.getElementById('add-strict-mode-schedule-btn');
+  const saveStrictModeBtn = document.getElementById('save-strict-mode-btn');
+  const cancelStrictModeEditBtn = document.getElementById('cancel-strict-mode-edit-btn');
+  const strictModeForm = document.getElementById('strict-mode-form');
+
 
   let editingRuleId = null; // To store the ID of the rule being edited
+  let isStrictModeActive = false; // To track strict mode status
 
   // --- View Management ---
   const showView = (view) => {
-    ruleListView.style.display = 'none';
+    mainView.style.display = 'none';
     ruleEditorView.style.display = 'none';
+    strictModeView.style.display = 'none';
     view.style.display = 'block';
   };
 
-  const showRuleListView = () => {
-    showView(ruleListView);
+  const showMainView = () => {
+    showView(mainView);
     loadRules(); // Reload rules when returning to list view
+    updateStrictModeUI(); // Update strict mode status on main view
   };
 
   const showRuleEditorView = (rule = null) => {
@@ -43,17 +58,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     schedulesContainer.innerHTML = ''; // Clear existing schedules
     if (rule && rule.schedules && rule.schedules.length > 0) {
-      rule.schedules.forEach(schedule => addScheduleField(schedule.startTime, schedule.endTime));
+      rule.schedules.forEach(schedule => addScheduleField(schedule.startTime, schedule.endTime, schedulesContainer));
     } else {
-      addScheduleField(); // Add at least one empty schedule field
+      addScheduleField('', '', schedulesContainer); // Add at least one empty schedule field
     }
 
     editingRuleId = rule ? rule.id : null;
     showView(ruleEditorView);
   };
 
-  // --- Schedule Management in Editor ---
-  const addScheduleField = (startTime = '', endTime = '') => {
+  const showStrictModeView = async () => {
+    const { strictModeEnabled = false, strictModeSchedules = [] } = await chrome.storage.sync.get(['strictModeEnabled', 'strictModeSchedules']);
+    strictModeToggle.checked = strictModeEnabled;
+    
+    strictModeSchedulesContainer.innerHTML = '';
+    if (strictModeSchedules.length > 0) {
+      strictModeSchedules.forEach(schedule => addScheduleField(schedule.startTime, schedule.endTime, strictModeSchedulesContainer));
+    } else {
+      addScheduleField('', '', strictModeSchedulesContainer); // Add at least one empty schedule field
+    }
+    showView(strictModeView);
+  };
+
+  // --- Schedule Management ---
+  const addScheduleField = (startTime = '', endTime = '', container) => {
+    const targetContainer = container || schedulesContainer; // Default to schedulesContainer
     const scheduleItem = document.createElement('div');
     scheduleItem.className = 'schedule-item';
     scheduleItem.innerHTML = `
@@ -61,15 +90,110 @@ document.addEventListener('DOMContentLoaded', () => {
       <label>To <input type="time" class="end-time" value="${endTime}" required></label>
       <button type="button" class="remove-schedule-btn">Remove</button>
     `;
-    schedulesContainer.appendChild(scheduleItem);
+    targetContainer.appendChild(scheduleItem);
 
     scheduleItem.querySelector('.remove-schedule-btn').addEventListener('click', (e) => {
-      if (schedulesContainer.children.length > 1) { // Ensure at least one schedule remains
+      if (targetContainer.children.length > 1) {
         e.target.closest('.schedule-item').remove();
+        if (targetContainer === strictModeSchedulesContainer) {
+          saveStrictModeSettings(); // Save settings after removing a strict mode schedule
+        }
       } else {
         alert('At least one schedule is required.');
       }
     });
+
+    if (targetContainer === strictModeSchedulesContainer) {
+      scheduleItem.querySelectorAll('input[type="time"]').forEach(input => {
+        input.addEventListener('blur', () => {
+          // No direct save here, save will happen on form submit
+        }); 
+      });
+    }
+  };
+
+  // Function to check if current time is within any of the strict mode's time ranges
+  const isTimeInAnyRange = (schedules) => {
+    const now = new Date();
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), currentHours, currentMinutes, 0);
+
+    for (const schedule of schedules) {
+      const [startHours, startMinutes] = schedule.startTime.split(':').map(Number);
+      const [endHours, endMinutes] = schedule.endTime.split(':').map(Number);
+
+      const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHours, startMinutes, 0);
+      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), endHours, endMinutes, 0);
+
+      if (startDate.getTime() > endDate.getTime()) {
+        if (currentTime.getTime() >= startDate.getTime() || currentTime.getTime() < endDate.getTime()) {
+          return true;
+        }
+      } else {
+        if (currentTime.getTime() >= startDate.getTime() && currentTime.getTime() < endDate.getTime()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // --- Strict Mode Management ---
+  const updateStrictModeUI = async () => {
+    const { strictModeEnabled = false, strictModeSchedules = [] } = await chrome.storage.sync.get(['strictModeEnabled', 'strictModeSchedules']);
+    isStrictModeActive = strictModeEnabled && isTimeInAnyRange(strictModeSchedules);
+    
+    // Update main view message and button states
+    strictModeMessageMain.style.display = isStrictModeActive ? 'block' : 'none';
+    addNewRuleBtn.disabled = isStrictModeActive;
+    configureStrictModeBtn.disabled = isStrictModeActive;
+    rulesList.querySelectorAll('.edit-btn, .delete-btn').forEach(btn => {
+      btn.disabled = isStrictModeActive;
+    });
+
+    // Update strict mode configuration view (when visible)
+    if (strictModeView.style.display === 'block') {
+      strictModeToggle.checked = strictModeEnabled;
+      strictModeToggle.disabled = isStrictModeActive;
+      strictModeSchedulesContainer.querySelectorAll('input, button').forEach(element => {
+        element.disabled = isStrictModeActive;
+      });
+      saveStrictModeBtn.disabled = isStrictModeActive;
+      addStrictModeScheduleBtn.disabled = isStrictModeActive;
+    }
+    loadRules(); // Re-render rules to apply disabled state if strict mode changes
+  };
+
+  const saveStrictModeSettings = async () => {
+    let strictModeEnabled = strictModeToggle.checked;
+    const { strictModeEnabled: currentStrictModeEnabled } = await chrome.storage.sync.get('strictModeEnabled');
+
+    if (strictModeEnabled && !currentStrictModeEnabled) { // Only ask for confirmation when enabling
+      const confirmed = confirm('Are you sure you want to enable Strict Mode? Once active, you will not be able to modify rules or Strict Mode settings until the scheduled time passes.');
+      if (!confirmed) {
+        strictModeToggle.checked = false; // Revert toggle if not confirmed
+        strictModeEnabled = false;
+      }
+    }
+
+    const schedules = [];
+    strictModeSchedulesContainer.querySelectorAll('.schedule-item').forEach(item => {
+      const startTime = item.querySelector('.start-time').value;
+      const endTime = item.querySelector('.end-time').value;
+      if (startTime && endTime) {
+        schedules.push({ startTime, endTime });
+      }
+    });
+
+    if (strictModeEnabled && schedules.length === 0) {
+      alert('Strict Mode requires at least one schedule.');
+      strictModeToggle.checked = false;
+      return;
+    }
+
+    await chrome.storage.sync.set({ strictModeEnabled, strictModeSchedules: schedules });
+    showMainView(); // Go back to main view after saving
   };
 
   // --- Rule Storage and Display ---
@@ -98,11 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         
         listItem.querySelector('.edit-btn').addEventListener('click', () => {
-          showRuleEditorView(rule);
+          if (!isStrictModeActive) showRuleEditorView(rule);
         });
         
         listItem.querySelector('.delete-btn').addEventListener('click', () => {
-          deleteRule(rule.id);
+          if (!isStrictModeActive) deleteRule(rule.id);
         });
         
         rulesList.appendChild(listItem);
@@ -140,12 +264,19 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // --- Event Listeners ---
-  addNewRuleBtn.addEventListener('click', () => showRuleEditorView());
-  addScheduleBtn.addEventListener('click', () => addScheduleField());
-  cancelEditBtn.addEventListener('click', () => showRuleListView());
+  addNewRuleBtn.addEventListener('click', () => {
+    if (!isStrictModeActive) showRuleEditorView();
+  });
+  configureStrictModeBtn.addEventListener('click', () => {
+    if (!isStrictModeActive) showStrictModeView();
+  });
+  addScheduleBtn.addEventListener('click', () => addScheduleField('', '', schedulesContainer));
+  cancelEditBtn.addEventListener('click', () => showMainView());
 
   ruleForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (isStrictModeActive) return; // Prevent saving if strict mode is active
+
     const name = ruleNameInput.value.trim();
     const websites = websitesTextarea.value.split('\n').map(w => w.trim()).filter(w => w !== '');
     const type = typeBlockRadio.checked ? 'block' : 'exception';
@@ -174,25 +305,15 @@ document.addEventListener('DOMContentLoaded', () => {
     saveRule(newRule);
   });
 
-  forceCheckBtn.addEventListener('click', () => {
-    statusMessage.textContent = 'Checking blocked tabs...';
-    statusMessage.style.color = 'blue';
-
-    chrome.runtime.sendMessage({ action: "forceCheck" }, (response) => {
-      if (response && response.success) {
-        statusMessage.textContent = 'Force check completed successfully!';
-        statusMessage.style.color = 'green';
-      } else {
-        statusMessage.textContent = `Error: ${response?.error || 'Unknown error'}`;
-        statusMessage.style.color = 'red';
-      }
-
-      setTimeout(() => {
-        statusMessage.textContent = '';
-      }, 3000);
-    });
+  strictModeForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (isStrictModeActive) return; // Prevent saving if strict mode is active
+    saveStrictModeSettings();
   });
 
+  cancelStrictModeEditBtn.addEventListener('click', () => showMainView());
+  addStrictModeScheduleBtn.addEventListener('click', () => addScheduleField('', '', strictModeSchedulesContainer));
+  
   // Initial load
-  showRuleListView();
+  showMainView();
 });

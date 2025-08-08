@@ -82,13 +82,22 @@ async function checkAndRedirectBlockedTabs() {
       }
     });
 
-    const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+    const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*", "chrome://*/*"] });
     console.log(`Checking ${tabs.length} tabs for blocking/exception rules`);
 
     for (const tab of tabs) {
       try {
-        const tabUrl = new URL(tab.url);
-        const tabDomain = tabUrl.hostname;
+        let tabUrl;
+        let tabDomain;
+
+        // Handle chrome:// URLs separately as new URL() throws for them
+        if (tab.url.startsWith('chrome://')) {
+          tabUrl = tab.url;
+          tabDomain = tab.url.split('/')[2]; // Extract "extensions", "settings", etc.
+        } else {
+          tabUrl = new URL(tab.url);
+          tabDomain = tabUrl.hostname;
+        }
 
         let shouldBlock = false;
 
@@ -105,8 +114,8 @@ async function checkAndRedirectBlockedTabs() {
         }
 
         if (shouldBlock && !tab.url.includes('blocked.html')) {
-          console.log(`🚫 BLOCKING: Redirecting tab on domain: ${tab.url} (domain: ${tabDomain})`);
-          const blockedPageUrl = chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(tabDomain)}`);
+          console.log(`🚫 BLOCKING: Redirecting tab on URL: ${tab.url} (domain/path: ${tabDomain})`);
+          const blockedPageUrl = chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(tabUrl)}`);
 
           try {
             await chrome.tabs.update(tab.id, { url: blockedPageUrl });
@@ -334,7 +343,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true });
       })
       .catch(error => {
-        console.error('Error force checking rules from message:', error);
+        console.error('Error updating rules from message:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true;

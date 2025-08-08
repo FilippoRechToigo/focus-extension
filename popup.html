@@ -7,11 +7,13 @@
 <body>
   <h1>Scheduled Site Blocker</h1>
   
-  <div id="rule-list-view">
+  <div id="main-view">
     <button id="add-new-rule-btn">Add New Rule</button>
+    <button id="configure-strict-mode-btn">Configure Strict Mode</button>
     <h2>Your Rules</h2>
     <ul id="rules-list">
-      </ul>
+    </ul>
+    <p id="strict-mode-message-main" style="color: red; display: none;">Strict Mode is active. Rule editing and deletion are disabled.</p>
   </div>
 
   <div id="rule-editor-view" style="display: none;">
@@ -48,11 +50,27 @@
     </form>
   </div>
 
-  <hr>
-
-  <h2>Test Controls</h2>
-  <button id="force-check-btn">Force Check Blocked Tabs</button>
-  <div id="status-message"></div>
+  <div id="strict-mode-view" style="display: none;">
+    <h2>Strict Mode Configuration</h2>
+    <form id="strict-mode-form">
+      <label>
+        <input type="checkbox" id="strict-mode-toggle"> Enable Strict Mode
+      </label>
+      <h3>Strict Mode Schedules</h3>
+      <div id="strict-mode-schedules-container">
+        <div class="schedule-item">
+          <label>From <input type="time" class="start-time" required></label>
+          <label>To <input type="time" class="end-time" required></label>
+          <button type="button" class="remove-schedule-btn">Remove</button>
+        </div>
+      </div>
+      <button type="button" id="add-strict-mode-schedule-btn">Add Schedule</button>
+      <div class="form-actions">
+        <button type="submit" id="save-strict-mode-btn">Save Strict Mode</button>
+        <button type="button" id="cancel-strict-mode-edit-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
 
   <script src="popup.js"></script>
 </body>
